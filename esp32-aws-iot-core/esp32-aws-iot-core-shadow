@@ -1,0 +1,172 @@
+#include "secrets.h"
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
+#include "WiFi.h"
+
+const int ledPin = 2;  // Pin connected to the LED (GPIO 2 is often used on ESP32)
+
+unsigned long previousMillis = 0;  // will store last time LED was updated
+const long interval = 10000;  // interval at which to blink (milliseconds)
+
+#include "DHT.h"
+#define DHTPIN 15      // Digital pin connected to the DHT sensor
+#define DHTTYPE DHT22  // DHT 11
+
+#define AWS_IOT_PUBLISH_TOPIC "esp32/pub"
+#define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"
+const char* shadowTopic = "$aws/things/ESP32/shadow/update";  // Shadow update topic
+const char* shadowGetTopic = "$aws/things/ESP32/shadow/#";    // Shadow get topic
+
+float h;
+float t;
+
+DHT dht(DHTPIN, DHTTYPE);
+
+WiFiClientSecure net = WiFiClientSecure();
+PubSubClient client(net);
+
+void connectAWS() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  Serial.println("Connecting to Wi-Fi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  // Configure WiFiClientSecure to use the AWS IoT device credentials
+  net.setCACert(AWS_CERT_CA);
+  net.setCertificate(AWS_CERT_CRT);
+  net.setPrivateKey(AWS_CERT_PRIVATE);
+
+  // Connect to the MQTT broker on the AWS endpoint we defined earlier
+  client.setServer(AWS_IOT_ENDPOINT, 8883);
+
+  // Create a message handler
+  client.setCallback(messageHandler);
+
+  Serial.println("Connecting to AWS IOT");
+
+  while (!client.connect(THINGNAME)) {
+    Serial.print(".");
+    delay(100);
+  }
+
+  if (!client.connected()) {
+    Serial.println("AWS IoT Timeout!");
+    return;
+  }
+
+  // Subscribe to a topic
+  client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
+  client.subscribe(shadowGetTopic);
+
+  Serial.println("AWS IoT Connected!");
+}
+
+void publishMessage() {
+  StaticJsonDocument<200> doc;
+  doc["humidity"] = h;
+  doc["temperature"] = t;
+  char jsonBuffer[512];
+  serializeJson(doc, jsonBuffer);  // print to client
+
+  client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer);
+}
+
+void messageHandler(char* topic, byte* payload, unsigned int length) {
+  Serial.print("incoming: ");
+  Serial.println(topic);
+
+  // Parse the payload to extract the "desired" state for both temperature and LED
+  StaticJsonDocument<200> doc;
+  DeserializationError error = deserializeJson(doc, payload);
+  //StaticJsonDocument<200> doc;
+  //deserializeJson(doc, payload);
+  const char* message = doc["message"];
+  Serial.println(message);
+
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.f_str());
+    return;
+  }
+
+  // Check if the desired temperature is in the shadow update
+  if (doc["state"]["desired"]["temperature"].is<float>()) {
+    float desiredTemperature = doc["state"]["desired"]["temperature"];
+    Serial.print("Desired Temperature: ");
+    Serial.println(desiredTemperature);
+
+    // You could add logic to act on the desired temperature (e.g., control a fan or heater)
+  }
+
+  // Check if the desired temperature is in the shadow update
+  if (doc["state"]["desired"]["humidity"].is<float>()) {
+    float desiredHumidity = doc["state"]["desired"]["humidity"];
+    Serial.print("Desired Humidity: ");
+    Serial.println(desiredHumidity);
+
+    // You could add logic to act on the desired humidity (e.g., control a fan or heater)
+  }
+
+  // Check if the desired LED state is in the shadow update
+  if (doc["state"]["desired"]["led"].is<bool>()) {
+    bool ledState = doc["state"]["desired"]["led"];
+    digitalWrite(ledPin, ledState ? HIGH : LOW);  // Set LED based on desired state
+    Serial.print("LED state set to: ");
+    Serial.println(ledState ? "ON" : "OFF");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  // Initialize LED pin
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);  // Start with LED off
+  connectAWS();
+  dht.begin();
+}
+
+void loop() {
+
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= interval) {
+
+    previousMillis = currentMillis;
+
+    h = dht.readHumidity();
+    t = dht.readTemperature();
+
+
+    if (isnan(h) || isnan(t))  // Check if any reads failed and exit early (to try again).
+    {
+      Serial.println(F("Failed to read from DHT sensor!"));
+      return;
+    }
+
+    Serial.print(F("Humidity: "));
+    Serial.print(h);
+    Serial.print(F("%  Temperature: "));
+    Serial.print(t);
+    Serial.println(F("°C "));
+
+    //publishMessage();
+
+    // Send shadow update with the current temperature and LED state
+    StaticJsonDocument<200> doc;
+    doc["state"]["reported"]["temperature"] = t;
+    doc["state"]["reported"]["humidity"] = h;
+    doc["state"]["reported"]["led"] = digitalRead(ledPin);  // Report the current LED state
+
+    char jsonBuffer[512];
+    serializeJson(doc, jsonBuffer);  // Serialize the JSON object
+
+    client.publish(shadowTopic, jsonBuffer);  // Publish the update to AWS IoT
+    client.loop();
+  }
+}

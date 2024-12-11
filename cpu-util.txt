@@ -1,0 +1,8 @@
+            import psutil
+            message_json = json.dumps(
+                {
+                    "time": int(time.time()),
+                    "type": "Raspberry Pi",
+                    "deviceId": "<username>",
+                    "value": psutil.cpu_percent(),
+                }, indent=2)

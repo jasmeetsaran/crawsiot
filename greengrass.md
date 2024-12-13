@@ -14,3 +14,7 @@ sudo ./aws/install
 #### Export Variables
 export AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID>
 export AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY>
+
+
+#### list components
+sudo /greengrass/v2/bin/greengrass-cli component list

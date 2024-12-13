@@ -18,3 +18,6 @@ export AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY>
 
 #### list components
 sudo /greengrass/v2/bin/greengrass-cli component list
+
+#### debug password
+greengrass-cli get-debug-password

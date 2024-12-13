@@ -6,6 +6,8 @@ wget -O - https://apt.corretto.aws/corretto.key | sudo gpg --dearmor -o /usr/sha
 sudo apt-get update; sudo apt-get install -y java-11-amazon-corretto-jdk
 
 
+
+AWS CLI
 curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
 
 unzip awscliv2.zip

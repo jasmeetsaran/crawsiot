@@ -7,5 +7,7 @@ sudo apt-get update; sudo apt-get install -y java-11-amazon-corretto-jdk
 
 
 curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+
 unzip awscliv2.zip
+
 sudo ./aws/install
